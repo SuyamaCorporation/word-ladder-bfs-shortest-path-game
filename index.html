@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ワードラダー BFS最短経路ゲーム</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .word-step {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 1.2rem;
+      font-weight: bold;
+      letter-spacing: 0.15em;
+      background: #1e293b;
+      border: 2px solid #334155;
+      color: #e2e8f0;
+    }
+    .word-step.start { border-color: #3b82f6; color: #93c5fd; }
+    .word-step.goal { border-color: #10b981; color: #6ee7b7; }
+    .word-step.player-step { border-color: #8b5cf6; color: #c4b5fd; }
+    .word-step.wrong { border-color: #ef4444; animation: shake 0.3s; }
+    .word-step.hint-step { border-color: #f59e0b; color: #fcd34d; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .diff-char { color: #f97316; text-decoration: underline; }
+    #timer-bar { transition: width 1s linear; }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center py-8 px-4">
+  <h1 class="text-3xl font-bold mb-2 text-cyan-400">🔤 ワードラダー BFS</h1>
+  <p class="text-gray-400 mb-6 text-sm text-center">1文字だけ変えながらスタート単語をゴール単語に変換してください</p>
+
+  <div class="flex gap-3 mb-5 flex-wrap justify-center items-center text-sm">
+    <div class="flex items-center gap-2">
+      <label class="text-gray-300">制限時間:</label>
+      <select id="time-limit" class="bg-gray-700 text-white rounded px-2 py-1 border border-gray-600">
+        <option value="0">なし</option>
+        <option value="60">60秒</option>
+        <option value="90" selected>90秒</option>
+        <option value="120">120秒</option>
+      </select>
+    </div>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input id="show-hint-toggle" type="checkbox" class="rounded">
+      <span class="text-gray-300">最短ヒント表示</span>
+    </label>
+    <button id="btn-new" class="bg-cyan-700 hover:bg-cyan-600 px-4 py-1 rounded font-semibold">新しい問題</button>
+  </div>
+
+  <!-- Timer bar -->
+  <div id="timer-container" class="w-80 h-3 bg-gray-700 rounded overflow-hidden mb-3 hidden">
+    <div id="timer-bar" class="h-full bg-cyan-500" style="width:100%"></div>
+  </div>
+  <div id="timer-text" class="text-sm text-gray-400 mb-3"></div>
+
+  <!-- Puzzle info -->
+  <div class="flex gap-8 mb-5 text-center">
+    <div>
+      <div class="text-xs text-gray-400 mb-1">スタート</div>
+      <div class="word-step start" id="word-start">----</div>
+    </div>
+    <div class="flex items-center text-2xl text-gray-500">→</div>
+    <div>
+      <div class="text-xs text-gray-400 mb-1">ゴール</div>
+      <div class="word-step goal" id="word-goal">----</div>
+    </div>
+  </div>
+
+  <div class="flex gap-4 mb-4 text-sm">
+    <div class="bg-gray-800 rounded px-3 py-1">手数: <span id="step-count" class="text-cyan-400 font-bold">0</span></div>
+    <div class="bg-gray-800 rounded px-3 py-1">最短: <span id="optimal-steps" class="text-yellow-400 font-bold">?</span></div>
+  </div>
+
+  <!-- Path display -->
+  <div id="path-display" class="flex flex-col items-center gap-2 mb-5 min-h-16"></div>
+
+  <!-- Input -->
+  <div id="input-area" class="flex gap-2 mb-4">
+    <input id="word-input" type="text" maxlength="4" placeholder="次の単語を入力"
+      class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-center font-mono text-lg uppercase w-36 focus:outline-none focus:border-cyan-500 tracking-widest"
+      autocomplete="off" autocorrect="off" spellcheck="false">
+    <button id="btn-submit" class="bg-cyan-700 hover:bg-cyan-600 px-4 py-2 rounded font-semibold">確定</button>
+  </div>
+
+  <div id="status-msg" class="text-sm text-gray-300 mb-4 text-center min-h-5"></div>
+
+  <!-- Hint path (hidden by default) -->
+  <div id="hint-area" class="text-sm text-center text-yellow-400 hidden mb-3">
+    <div class="text-xs text-gray-400 mb-1">BFS最短経路:</div>
+    <div id="hint-path" class="flex gap-2 flex-wrap justify-center"></div>
+  </div>
+
+  <script>
+    // 4-letter word database (~300 common words)
+    const WORDS4 = `able acid aged also area army away back ball band bank base bath bear beat been bell best bird blow blue boat body bold bolt bone book born both bowl bulk burn call came card care cart cash cast cave chat chin chip city clam clap clay clip club coal coat code coil cold come cool copy cord core corn cost coup crew crop curl cute dark data dawn dead deal dean dear debt deck deep deny dew diet disk dock does dome door dose down draw drew drip drop drum dual dump dusk dust duty each earn east easy edge else emit ends even evil exam face fact fail fair fall fame fang farm fast fate fear feel feet fell felt fern fill find fire fish fist five flag flat flew flog flow foam fold folk fond font food fool foot fork form fort foul free from frog fuel full fund fuse gain game gang gate gave gear gift girl give glad glow glue goat goes gold golf gone gown grab grid grim grip grow gulf gust guts half hall hand hang hard harm harp hash haze head heal heap hear heat heel held help hemp here hero high hill hint hole holy home hood hook hope horn host hour huge hull hung hunt hurt hymn idea idle inch into iris iron item jack jade jail jell jerk join joke jolt jump just keen keep keel kill kind king knob lack laid lame land lane lash last late lawn lead leaf leak lean leap left lend less life lift like lime line lion list live loan lock long look loom loop lord lore lose loss lost loud love luck lure lurk lush made mail main make male mall malt mane many mark mars mash mask mast mate math maze meal mean meat meet melt memo mesh mild milk mill mime mind mine mint miss mist moat mode molt moon moor more most moth muck mule must nail name neat neck need nest next node none noon norm note noun null oath obey odds offs once only open oral ours oven over owed owns pace pack page paid pair pale palm part pass past path pave peak peel peel peer peg pelt pest pick pier pike pile pill pine pink pipe plan play plea plod plot plow plum plus poem pole poll pond pool pore port pose post pour pray prey prim prod prop pull pump punt pure push quit race rack rage raid rail rain rake ramp rang rank rare rash rate rave read real reap rear reed reef reel rein rely rest rice rich rick ride rift ring riot rise road roam roar robe rock rode role roll romp roof room rope rose rove ruin rule rump rune ruse rush rust safe sage sail sale salt same sand sane sang sank sash save scam scar seal seam seep self sell sent sew shad shed shin ship shoe shop shot show shut silk sill silt sink site sift silk size skew skip slab slag slam slap slat sled slim slip slot slow slug slum snap snob snow soap soak soar sock soft soil sold sole some song sort soul soup sour span spar spin spit spot spur stab stag star stay stem step stew stir stop stub stud stun suck suit sulk sump sunk sure swap swat swim swum tail tale tame tang tank tape tare tart task teal teem tell tend tent term test than that them then they thin this thud tick tide tied till tilt time toad toil toll tomb tone tool tops tore torn toss tour town tram trap tray tree trim trio trip trod trot true tuck tuft tusk twin type ugly undo unit upon used vale vary vase vast veal veil vein vent very vest vial vice view vile vine void volt wade wage wail wait wake wand wane ward warm wart wary wash wasp wave weed week well went west whim whip wide wigs wild wilt wind wine wing wink wisp woke wolf womb wool word wore work worm worn wove writ yard yarn year yell yoga yoke yore zero zinc zone zoom`.split(/\s+/).filter(w=>w.length===4);
+
+    const wordSet = new Set(WORDS4);
+
+    // Build adjacency - two words are adjacent if they differ by exactly 1 char
+    function diffCount(a, b) {
+      let d=0;
+      for (let i=0;i<4;i++) if (a[i]!==b[i]) d++;
+      return d;
+    }
+
+    // BFS shortest path
+    function bfsPath(start, goal) {
+      if (start===goal) return [start];
+      const q=[{word:start, path:[start]}];
+      const visited=new Set([start]);
+      while (q.length>0) {
+        const {word, path}=q.shift();
+        for (const neighbor of WORDS4) {
+          if (!visited.has(neighbor) && diffCount(word,neighbor)===1) {
+            const npath=[...path,neighbor];
+            if (neighbor===goal) return npath;
+            visited.add(neighbor);
+            q.push({word:neighbor,path:npath});
+          }
+        }
+      }
+      return null;
+    }
+
+    // Puzzle state
+    let startWord, goalWord, optimalPath, currentPath, playerSteps;
+    let timerLimit, timerRemaining, timerInterval;
+    let gameOver=false;
+
+    // Curated puzzle pairs (confirmed solvable)
+    const PUZZLES = [
+      ['cold','warm'],['head','tail'],['lead','gold'],['love','hate'],
+      ['four','five'],['dark','lark'],['last','fast'],['hand','band'],
+      ['pale','tale'],['boat','coat'],['fire','hire'],['hill','fill'],
+      ['ring','sing'],['wind','bind'],['rose','nose'],['pale','male'],
+      ['ball','bell'],['fill','film'],['band','sand'],['gate','late'],
+      ['born','corn'],['land','lend'],['word','ward'],['meat','beat'],
+      ['sole','sale'],['cave','gave'],['kind','find'],['race','pace'],
+      ['cake','lake'],['corn','born'],
+    ];
+
+    function newPuzzle() {
+      const pair=PUZZLES[Math.floor(Math.random()*PUZZLES.length)];
+      startWord=pair[0]; goalWord=pair[1];
+      optimalPath=bfsPath(startWord,goalWord);
+      if (!optimalPath) {
+        // fallback
+        startWord='cold'; goalWord='warm';
+        optimalPath=bfsPath(startWord,goalWord);
+      }
+      currentPath=[startWord];
+      playerSteps=0;
+      gameOver=false;
+
+      document.getElementById('word-start').textContent=startWord.toUpperCase();
+      document.getElementById('word-goal').textContent=goalWord.toUpperCase();
+      document.getElementById('step-count').textContent=0;
+      document.getElementById('optimal-steps').textContent=optimalPath?(optimalPath.length-1):'?';
+      document.getElementById('word-input').value='';
+      document.getElementById('status-msg').textContent='';
+      document.getElementById('hint-area').classList.add('hidden');
+
+      renderPath();
+      updateHint();
+      startTimer();
+      document.getElementById('word-input').focus();
+    }
+
+    function renderPath() {
+      const area=document.getElementById('path-display');
+      area.innerHTML='';
+      currentPath.forEach((word,i)=>{
+        if (i>0) {
+          const arrow=document.createElement('div');
+          arrow.className='text-gray-500 text-lg';
+          arrow.textContent='↓';
+          area.appendChild(arrow);
+        }
+        const el=document.createElement('div');
+        el.className='word-step';
+        if (i===0) el.classList.add('start');
+        else if (word===goalWord) el.classList.add('goal');
+        else el.classList.add('player-step');
+
+        // Highlight diff char
+        const prev=i>0?currentPath[i-1]:'';
+        if (prev) {
+          el.innerHTML='';
+          for (let c=0;c<4;c++) {
+            const span=document.createElement('span');
+            span.textContent=word[c].toUpperCase();
+            if (prev[c]!==word[c]) span.className='diff-char';
+            el.appendChild(span);
+          }
+        } else {
+          el.textContent=word.toUpperCase();
+        }
+        area.appendChild(el);
+      });
+    }
+
+    function submitWord() {
+      if (gameOver) return;
+      const inp=document.getElementById('word-input');
+      const w=inp.value.toLowerCase().trim();
+      inp.value='';
+
+      if (w.length!==4) { setStatus('⚠️ 4文字の単語を入力してください','red'); return; }
+      if (!wordSet.has(w)) { setStatus(`⚠️「${w.toUpperCase()}」は辞書にありません`,'red'); flashInput(); return; }
+      const last=currentPath[currentPath.length-1];
+      const d=diffCount(last,w);
+      if (d===0) { setStatus('⚠️ 同じ単語です','red'); return; }
+      if (d>1) { setStatus(`⚠️ 1文字だけ変えてください（${d}文字違います）`,'red'); flashInput(); return; }
+      if (currentPath.includes(w)) { setStatus('⚠️ すでに使った単語です','red'); return; }
+
+      currentPath.push(w);
+      playerSteps++;
+      document.getElementById('step-count').textContent=playerSteps;
+      renderPath();
+      setStatus('','');
+
+      if (w===goalWord) {
+        gameOver=true;
+        stopTimer();
+        const optimal=optimalPath?optimalPath.length-1:0;
+        const diff=playerSteps-optimal;
+        if (diff===0) setStatus(`🎉 完璧！最短${optimal}手でクリア！`,'green');
+        else setStatus(`✅ クリア！ ${playerSteps}手（最短より${diff}手多い）`,'blue');
+        document.getElementById('word-input').disabled=true;
+        document.getElementById('btn-submit').disabled=true;
+      }
+    }
+
+    function flashInput() {
+      const inp=document.getElementById('word-input');
+      inp.style.borderColor='#ef4444';
+      setTimeout(()=>inp.style.borderColor='',600);
+    }
+
+    function setStatus(msg, type) {
+      const el=document.getElementById('status-msg');
+      el.textContent=msg;
+      el.className='text-sm mb-4 text-center min-h-5 '+
+        (type==='red'?'text-red-400':type==='green'?'text-green-400':type==='blue'?'text-cyan-400':'text-gray-300');
+    }
+
+    function updateHint() {
+      const show=document.getElementById('show-hint-toggle').checked;
+      const area=document.getElementById('hint-area');
+      const pathEl=document.getElementById('hint-path');
+      if (show && optimalPath) {
+        area.classList.remove('hidden');
+        pathEl.innerHTML='';
+        optimalPath.forEach((w,i)=>{
+          if (i>0) { const a=document.createElement('span'); a.className='text-gray-500'; a.textContent='→'; pathEl.appendChild(a); }
+          const el=document.createElement('span'); el.className='word-step hint-step text-sm';
+          el.textContent=w.toUpperCase(); pathEl.appendChild(el);
+        });
+      } else {
+        area.classList.add('hidden');
+      }
+    }
+
+    function startTimer() {
+      stopTimer();
+      timerLimit=parseInt(document.getElementById('time-limit').value);
+      const container=document.getElementById('timer-container');
+      const bar=document.getElementById('timer-bar');
+      const txt=document.getElementById('timer-text');
+      if (timerLimit===0) { container.classList.add('hidden'); txt.textContent=''; return; }
+      container.classList.remove('hidden');
+      timerRemaining=timerLimit;
+      bar.style.width='100%';
+      txt.textContent=`残り ${timerRemaining} 秒`;
+      timerInterval=setInterval(()=>{
+        timerRemaining--;
+        const pct=timerRemaining/timerLimit*100;
+        bar.style.width=pct+'%';
+        bar.className='h-full '+(pct>50?'bg-cyan-500':pct>25?'bg-yellow-500':'bg-red-500');
+        txt.textContent=`残り ${timerRemaining} 秒`;
+        if (timerRemaining<=0) {
+          stopTimer();
+          gameOver=true;
+          setStatus('⏰ タイムアップ！','red');
+          document.getElementById('word-input').disabled=true;
+          document.getElementById('btn-submit').disabled=true;
+        }
+      },1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) { clearInterval(timerInterval); timerInterval=null; }
+    }
+
+    document.getElementById('btn-new').addEventListener('click',()=>{
+      document.getElementById('word-input').disabled=false;
+      document.getElementById('btn-submit').disabled=false;
+      newPuzzle();
+    });
+    document.getElementById('btn-submit').addEventListener('click',submitWord);
+    document.getElementById('word-input').addEventListener('keydown',e=>{ if(e.key==='Enter') submitWord(); });
+    document.getElementById('show-hint-toggle').addEventListener('change',updateHint);
+    document.getElementById('time-limit').addEventListener('change',()=>{ if(!gameOver) startTimer(); });
+
+    newPuzzle();
+  </script>
+</body>
+</html>
